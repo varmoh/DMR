@@ -5,7 +5,7 @@ on:
     branches:
       - images
     paths:
-      - '.env.test'
+      - '.env.agent'
 
 jobs:
   PackageDeploy:
