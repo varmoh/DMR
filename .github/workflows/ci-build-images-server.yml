@@ -33,8 +33,8 @@ jobs:
            echo "$GITHUB_ENV"
       - name: Docker Build
         run: | 
-           cd apps/dmr-server
-           docker image build -f Dockerfile --tag $DOCKER_TAG_CUSTOM --no-cache .
+           
+           docker image build -f apps/dmr-server/Dockerfile --no-cache .
 
       - name: Log in to GitHub container registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
