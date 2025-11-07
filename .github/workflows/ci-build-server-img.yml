@@ -20,12 +20,15 @@ jobs:
       - name: Load environment variables and set them
         run: |
           if [ -f .env.server ]; then
-            export $(cat .env.server | grep -v '^#' | xargs)
+            set -o allexport
+            source .env.server
+            set +o allexport
           fi
           echo "RELEASE=$RELEASE" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "BUILD=$BUILD" >> $GITHUB_ENV
           echo "FIX=$FIX" >> $GITHUB_ENV
+
       - name: Set repo
         run: |
           LOWER_CASE_GITHUB_REPOSITORY=$(echo $GITHUB_REPOSITORY | tr '[:upper:]' '[:lower:]')
