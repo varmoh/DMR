@@ -107,13 +107,12 @@ export class CentOpsService implements OnModuleInit {
       const authHeader = this.getAuthorizationHeader();
 
       this.logger.debug('CentOps sync request URL: ' + url);
-      this.logger.debug('CentOps Authorization header: ' + authHeader);
 
       const { data } = await firstValueFrom(
         this.httpService.get<IGetAgentConfigListResponse>(url, {
           params: { pageSize: 100 },
-          headers: { Authorization: authHeader }, // täpselt nagu curl
-          httpsAgent: new https.Agent({ rejectUnauthorized: false }), // test sertifikaadid lubatud
+          headers: { Authorization: authHeader },
+          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
         }),
       );
 
