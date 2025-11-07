@@ -112,7 +112,7 @@ export class CentOpsService implements OnModuleInit {
       const { data } = await firstValueFrom(
         this.httpService.get<IGetAgentConfigListResponse>(this.centOpsConfig.url, {
           params: { pageSize: 100 },
-          headers: { Authorization: this.getAuthorizationHeader() },
+          headers: { Authorization: `Basic ${this.getAuthorizationHeader()}` },
         }),
       );
 
