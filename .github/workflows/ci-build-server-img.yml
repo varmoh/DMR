@@ -3,7 +3,7 @@ name: Build and publish DMR-server with
 on:
   push:
     branches:
-      - images
+      - dev
     paths:
       - 'env.server'
 
