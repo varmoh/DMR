@@ -23,6 +23,7 @@ import { firstValueFrom } from 'rxjs';
 import { CentOpsConfig, centOpsConfig } from '../../common/config';
 import { RabbitMQService } from '../../libs/rabbitmq';
 import { CentOpsConfigurationDifference } from './interfaces/cent-ops-configuration-difference.interface';
+import * as https from 'https';
 
 @Injectable()
 export class CentOpsService implements OnModuleInit {
@@ -46,14 +47,11 @@ export class CentOpsService implements OnModuleInit {
       this.logger.debug(
         `Executing cron job '${this.CENT_OPS_JOB_NAME}' at ${new Date().toISOString()}`,
       );
-
       await this.syncConfiguration();
     };
 
     const job = new CronJob(this.centOpsConfig.cronTime, onTick);
-
     this.schedulerRegistry.addCronJob(this.CENT_OPS_JOB_NAME, job);
-
     job.start();
 
     this.logger.log(
@@ -75,7 +73,6 @@ export class CentOpsService implements OnModuleInit {
 
     if (centOpsConfigs.length === 0) {
       this.logger.warn('CentOps configuration is empty, attempting to sync configuration...');
-
       const syncedConfigs = await this.syncConfiguration();
 
       if (syncedConfigs && syncedConfigs.length > 0) {
@@ -93,7 +90,6 @@ export class CentOpsService implements OnModuleInit {
     const clientConfig = centOpsConfigs.find((config) => config.id === clientId);
     if (!clientConfig) {
       this.logger.error(`Client configuration not found by ${clientId}`);
-
       throw new BadRequestException('Client configuration not found');
     }
 
@@ -102,17 +98,22 @@ export class CentOpsService implements OnModuleInit {
 
   private getAuthorizationHeader() {
     const token = `${this.centOpsConfig.apiKey}:${this.centOpsConfig.apiSecret}`;
-    const base64 = Buffer.from(token).toString('base64');
-
-    return base64;
+    return Buffer.from(token).toString('base64'); // tagastab ainult YnlrOjEyMzQ=
   }
 
   async syncConfiguration(): Promise<ClientConfigDto[] | undefined> {
     try {
+      const url = this.centOpsConfig.url;
+      const authHeader = this.getAuthorizationHeader();
+
+      this.logger.debug('CentOps sync request URL: ' + url);
+      this.logger.debug('CentOps Authorization header: ' + authHeader);
+
       const { data } = await firstValueFrom(
-        this.httpService.get<IGetAgentConfigListResponse>(this.centOpsConfig.url, {
+        this.httpService.get<IGetAgentConfigListResponse>(url, {
           params: { pageSize: 100 },
-          headers: { Authorization: `Basic ${this.getAuthorizationHeader()}` },
+          headers: { Authorization: authHeader }, // täpselt nagu curl
+          httpsAgent: new https.Agent({ rejectUnauthorized: false }), // test sertifikaadid lubatud
         }),
       );
 
@@ -131,21 +132,17 @@ export class CentOpsService implements OnModuleInit {
         });
 
         const errors = await validate(clientConfig);
-
         if (errors.length > 0) {
           this.logger.error(
             `Validation failed for client configuration: ${JSON.stringify(errors)}`,
           );
-
           continue;
         }
-
         newConfigurations.push(clientConfig);
       }
 
       const difference = this.getDifference(configurations, newConfigurations);
 
-      // Setup queues for new agents with graceful error handling
       const queueSetupPromises = difference.added.map(async (addedConfiguration) => {
         try {
           const success = await this.rabbitMQService.setupQueue(addedConfiguration.id);
@@ -159,7 +156,6 @@ export class CentOpsService implements OnModuleInit {
         }
       });
 
-      // Delete queues for removed agents
       const queueDeletionPromises = difference.deleted.map(async (deletedConfiguration) => {
         try {
           await this.rabbitMQService.deleteQueue(deletedConfiguration.id);
@@ -168,20 +164,19 @@ export class CentOpsService implements OnModuleInit {
         }
       });
 
-      // Wait for all queue operations to complete (but don't block on failures)
       await Promise.allSettled([...queueSetupPromises, ...queueDeletionPromises]);
-
       await this.cacheManager.set(this.CENT_OPS_CONFIG_CACHE_KEY, newConfigurations);
       this.eventEmitter.emit(DmrServerEvent.UPDATED, difference);
 
       if (difference.certificateChanged.length > 0) {
         this.logger.warn(
-          `Certificate changes detected for ${difference.certificateChanged.length} agent(s): ${difference.certificateChanged.map((agent) => agent.id).join(', ')}`,
+          `Certificate changes detected for ${difference.certificateChanged.length} agent(s): ${difference.certificateChanged
+            .map((agent) => agent.id)
+            .join(', ')}`,
         );
       }
 
       this.logger.debug('CentOps configuration updated and stored in memory.');
-
       return newConfigurations;
     } catch (error: unknown) {
       if (error instanceof Error) {
